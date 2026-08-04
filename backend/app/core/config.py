@@ -9,5 +9,5 @@ class Settings(BaseSettings):
     supabase_key: str
     class Config:
         env_file = Path(__file__).resolve().parents[3]/ ".env"
-
+        
 settings = Settings ()
