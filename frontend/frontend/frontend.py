@@ -10,6 +10,9 @@ class State(rx.State):
     ticker: str = ""
 
     dcf_result: dict = {}
+    ai_summary: str = ""
+    search_results: list[dict] = []
+    live_stocks: list[dict] = []
  
     def set_ticker(self, value: str):
         self.ticker = value
@@ -17,9 +20,63 @@ class State(rx.State):
 
     async def fetch_dcf(self):
         import httpx
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.get(f"http://127.0.0.1:8001/fmp/{self.ticker}/get_full_dcf_valuation")
             self.dcf_result = response.json()
+
+
+    async def fetch_ai_summary(self):
+        import httpx
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(f"http://127.0.0.1:8001/ai/{self.ticker}/summary")
+            data = response.json()
+            self.ai_summary = data.get("summary", "")
+
+
+    async def search_ticker(self, value: str):
+        self.ticker = value
+        if len(value) < 2:
+            self.search_results = []
+            return
+        import httpx
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"http://127.0.0.1:8001/search/{value}")
+            self.search_results = response.json()
+
+    async def load_live_stocks(self):
+        import httpx
+        tickers = ",".join(s["ticker"] for s in DAILY_STOCKS)
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"http://127.0.0.1:8001/quotes/{tickers}")
+            live_data = response.json()
+        merged = []
+        for s in DAILY_STOCKS:
+            match = next((l for l in live_data if l["ticker"] == s["ticker"]), None)
+            if match:
+                merged.append({**s, "price": match["price"], "change": match["change"], "color": match["color"]})
+            else:
+                merged.append(s)
+        self.live_stocks = merged
+
+    @rx.var
+    def formatted_dcf_value(self) -> str:
+        if not self.dcf_result:
+            return ""
+        return f"${self.dcf_result['dcf_value']:,.0f}"
+
+    @rx.var
+    def formatted_discount_rate(self) -> str:
+        if not self.dcf_result:
+            return""
+        return f"{self.dcf_result['discount_rate']:.2%}"
+
+    @rx.var
+    def formatted_growth_rate(self) -> str:
+        if not self.dcf_result:
+            return ""
+        return f"{self.dcf_result['perpetual_growth_rate']:.2%}"
+
+
 
 ALL_STOCKS = [
     {"ticker": "AAPL", "price": "196.80", "change": "+1.2%", "color": "#0F6E56", "points": "0,24 16,22 32,23 48,15 64,17 80,9 96,12 112,6 130,4"},
@@ -106,14 +163,17 @@ def index() -> rx.Component:
         rx.box(
     rx.hstack(
     *[
-        stock_card(s["ticker"], s["price"], s["change"], s["color"], s["points"])
-        for s in DAILY_STOCKS
+        rx.foreach(
+                    State.live_stocks,
+                    lambda s: stock_card(s["ticker"], s["price"], s["change"], s["color"], s["points"]),
+                ),
     ],
     spacing="3",
     overflow_x="auto",
     style={
     "scrollbar_width": "thin",
-    "&::-webkit-scrollbar": {"height": "1px"},
+    "scrollbar_color": "#DDD8C8 transparent",
+    "&::-webkit-scrollbar": {"height": "1px"},  
     "&::-webkit-scrollbar-thumb": {"background_color": "#DDD8C8", "border_radius": "10px"},
 },
 ),
@@ -230,8 +290,32 @@ def markets() -> rx.Component:
                 rx.text(State.ticker),
                 placeholder="Enter a ticker (e.g. AAPL)",
                 value=State.ticker,
-                on_change=State.set_ticker,
+                on_change=State.search_ticker,
         ),
+
+        rx.cond(
+                    State.search_results,
+                    rx.vstack(
+                        rx.foreach(
+                            State.search_results,
+                            lambda r: rx.button(
+                                f"{r['ticker']} — {r['name']}",
+                                on_click=lambda: State.set_ticker(r["ticker"]),
+                                variant="ghost",
+                                width="100%",
+                            ),
+                        ),
+                        align="start",
+                        spacing="1",
+                    ),
+                ),
+
+        rx.button("Get AI Summary", on_click=State.fetch_ai_summary),
+
+                rx.cond(
+                    State.ai_summary,
+                    rx.text(State.ai_summary, size="4", color="#2B2A28", white_space="pre-wrap"),
+                ),
 
             rx.button("Get Valuation", on_click=State.fetch_dcf),
             
@@ -239,9 +323,9 @@ def markets() -> rx.Component:
                 State.dcf_result,
                 rx.vstack(
                     rx.heading(f"Valuation for {State.ticker}", size="6", color="#1F1D1A"),
-                    rx.text(f"DCF Value: ${State.dcf_result['dcf_value']:,.0f}", size="4", color="#2B2A28"),
-                    rx.text(f"Discount Rate (WACC): {State.dcf_result['discount_rate']:.2%}", size="4", color="#2B2A28"),
-                    rx.text(f"Perpetual Growth Rate: {State.dcf_result['perpetual_growth_rate']:.2%}", size="4", color="#2B2A28"),
+                    rx.text(f"DCF Value: {State.formatted_dcf_value}", size="4", color="#2B2A28"),
+                    rx.text(f"Discount Rate (WACC): {State.formatted_discount_rate}", size="4", color="#2B2A28"),
+                    rx.text(f"Perpetual Growth Rate: {State.formatted_growth_rate}", size="4", color="#2B2A28"),
                     spacing="2",
                     align="start",
                 )
@@ -251,6 +335,7 @@ def markets() -> rx.Component:
         align="start",
         padding="3rem 2rem",
         max_width="700px",
+        margin="0 auto",
         ),
         style={
             "background_color": "#F5F1E8",
@@ -259,6 +344,7 @@ def markets() -> rx.Component:
             "min_height": "100vh",
         },
     )
+
 
 def watchlist() -> rx.Component:
     return rx.box(
@@ -295,7 +381,7 @@ def contact() -> rx.Component:
 
 
 app = rx.App(style={"background_color": "#F5F1E8"})
-app.add_page(index)
+app.add_page(index, on_load=State.load_live_stocks)
 app.add_page(about, route="/about")
 app.add_page(markets, route="/markets")
 app.add_page(watchlist, route="/watchlist")

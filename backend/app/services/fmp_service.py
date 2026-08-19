@@ -133,3 +133,68 @@ def dcf_value(cash_flows, discount_rate, perpetual_growth_rate):
 def WACC(equity_weight, debt_weight, cost_of_equity, cost_of_debt, tax_rate):
      WACC = equity_weight * cost_of_equity + debt_weight * cost_of_debt * (1 - tax_rate)
      return WACC
+
+
+def search_companies(query: str, max_results: int = 8):
+    results = yf.Search(query, max_results=max_results).quotes
+    return [
+        {"ticker": r.get("symbol"), "name": r.get("shortname") or r.get("longname")}
+        for r in results
+        if r.get("symbol") and (r.get("shortname") or r.get("longname"))
+    ]
+
+
+
+import os
+from anthropic import Anthropic
+
+def generate_company_summary(ticker: str):
+    profile = get_company_profile(ticker)
+    income = get_income_statement(ticker, limit=3)
+    balance = get_balance_sheet(ticker, limit=1)
+    cash_flow = get_cash_flow(ticker, limit=1)
+
+    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    prompt = f"""Write a concise investment summary for {profile.get('companyName')} ({ticker}) in 5-6 sentences.
+
+Company profile:
+- Sector: {profile.get('sector')}
+- Current price: {profile.get('price')}
+- Market cap: {profile.get('marketCap')}
+
+Income statement (last 3 periods): {income}
+Balance sheet (most recent): {balance}
+Cash flow (most recent): {cash_flow}
+
+Cover: what the company does, the key revenue/earnings trend (with 1-2 specific numbers), and one notable balance sheet or cash flow characteristic. Be direct and factual — no headers, no bullet points, just plain sentences. Keep it under 150 words total."""
+
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=400,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return {"ticker": ticker, "summary": message.content[0].text}
+
+
+
+
+def get_live_quotes(tickers: list[str]):
+    data = yf.Tickers(" ".join(tickers))
+    results = []
+    for ticker in tickers:
+        info = data.tickers[ticker].fast_info
+        price = info.get("lastPrice")
+        prev_close = info.get("previousClose")
+        if price is None or prev_close is None or prev_close == 0:
+            continue
+        change_pct = ((price - prev_close) / prev_close) * 100
+        results.append({
+            "ticker": ticker,
+            "price": f"{price:.2f}",
+            "change": f"{change_pct:+.1f}%",
+            "color": "#0F6E56" if change_pct >= 0 else "#A32D2D",
+        })
+
+
+
+    return results

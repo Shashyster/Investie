@@ -1,7 +1,10 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi import Depends
 from sqlalchemy.orm import Session
-from app.services.fmp_service import get_company_profile, get_income_statement, get_balance_sheet, get_cash_flow, get_full_dcf_valuation
+from app.services.fmp_service import get_company_profile, get_income_statement, get_balance_sheet, get_cash_flow, get_full_dcf_valuation, search_companies, get_live_quotes, generate_company_summary
 
 from app.db.session import get_db
 from app.models.company import Company
@@ -48,6 +51,18 @@ def fetch_cash_flow(ticker: str):
 @app.get("/fmp/{ticker}/get_full_dcf_valuation")
 def fetch_full_dcf_valuation(ticker: str):
     return get_full_dcf_valuation(ticker)
+
+@app.get("/search/{query}")
+def search(query: str):
+    return search_companies(query)
+
+@app.get("/quotes/{tickers}")
+def quotes(tickers: str):
+    return get_live_quotes(tickers.split(","))
+
+@app.get("/ai/{ticker}/summary")
+def ai_summary(ticker: str):
+    return generate_company_summary(ticker)
 
 @app.post("/companies/fetch/{ticker}")
 def fetch_and_save_company(ticker: str, db: Session = Depends(get_db)):
