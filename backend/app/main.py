@@ -12,6 +12,17 @@ from app.schemas.company import CompanyCreate
 
 app = FastAPI()
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://frontend-silver-sun.reflex.run"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.get("/")
 def read_root():
     return {"message": "Investie API is running"}
@@ -50,7 +61,12 @@ def fetch_cash_flow(ticker: str):
 
 @app.get("/fmp/{ticker}/get_full_dcf_valuation")
 def fetch_full_dcf_valuation(ticker: str):
-    return get_full_dcf_valuation(ticker)
+        try:
+            return get_full_dcf_valuation(ticker)
+        except Exception as e:
+            if "rate limit" in str(e).lower() or "too many requests" in str(e).lower():
+                return {"error": "FMP is rate limiting requests right now. Please try again in a minute."}
+            return {"error": f"Could not fetch valuation: {str(e)}"}
 
 @app.get("/search/{query}")
 def search(query: str):
