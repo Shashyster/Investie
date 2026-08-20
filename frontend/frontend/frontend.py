@@ -127,7 +127,6 @@ def navbar() -> rx.Component:
         rx.hstack(
             rx.link("Home", href="/", color="#1F1D1A", size="4"),
             rx.link("Markets", href="/markets", color="#1F1D1A", size="4"),
-            rx.link("Watchlist", href="/watchlist", color="#1F1D1A", size="4"),
             rx.link("About", href="/about", color="#1F1D1A", size="4"),
             rx.link("Contact", href="/contact", color="#1F1D1A", size="4"),
             spacing="5",
@@ -356,25 +355,6 @@ def markets() -> rx.Component:
         },
     )
 
-
-def watchlist() -> rx.Component:
-    return rx.box(
-        navbar(),
-        rx.vstack(
-            rx.heading("Watchlist", size="8", color="#1F1D1A"),
-            rx.text("Here are your saved tickers:", size="4", color="#2B2A28"),
-            spacing="4",
-            align="start",
-            padding="3rem 2rem",
-            max_width="700px",
-        ),
-        style={
-            "background_color": "#F5F1E8",
-            "color": "#2B2A28",
-            "width": "100%",
-            "min_height": "100vh",
-        },
-    )
     
 def contact() -> rx.Component:
     return rx.box(
@@ -395,5 +375,4 @@ app = rx.App(style={"background_color": "#F5F1E8"})
 app.add_page(index, on_load=State.load_live_stocks)
 app.add_page(about, route="/about")
 app.add_page(markets, route="/markets")
-app.add_page(watchlist, route="/watchlist")
 app.add_page(contact, route="/contact")
