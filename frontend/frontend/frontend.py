@@ -21,14 +21,14 @@ class State(rx.State):
     async def fetch_dcf(self):
         import httpx
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(f"http://127.0.0.1:8001/fmp/{self.ticker}/get_full_dcf_valuation")
+            response = await client.get(f"https://investie-w3g4.onrender.com/fmp/{self.ticker}/get_full_dcf_valuation")
             self.dcf_result = response.json()
 
 
     async def fetch_ai_summary(self):
         import httpx
         async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.get(f"http://127.0.0.1:8001/ai/{self.ticker}/summary")
+            response = await client.get(f"https://investie-w3g4.onrender.com/ai/{self.ticker}/summary")
             data = response.json()
             self.ai_summary = data.get("summary", "")
 
@@ -40,14 +40,14 @@ class State(rx.State):
             return
         import httpx
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"http://127.0.0.1:8001/search/{value}")
+            response = await client.get(f"https://investie-w3g4.onrender.com/search/{value}")
             self.search_results = response.json()
 
     async def load_live_stocks(self):
         import httpx
         tickers = ",".join(s["ticker"] for s in DAILY_STOCKS)
         async with httpx.AsyncClient() as client:
-            response = await client.get(f"http://127.0.0.1:8001/quotes/{tickers}")
+            response = await client.get(f"https://investie-w3g4.onrender.com/quotes/{tickers}")
             live_data = response.json()
         merged = []
         for s in DAILY_STOCKS:
@@ -60,19 +60,25 @@ class State(rx.State):
 
     @rx.var
     def formatted_dcf_value(self) -> str:
-        if not self.dcf_result:
+        if not self.dcf_result or "error" in self.dcf_result:
             return ""
         return f"${self.dcf_result['dcf_value']:,.0f}"
 
     @rx.var
+    def dcf_error_message(self) -> str:
+        if self.dcf_result and "error" in self.dcf_result:
+            return self.dcf_result["error"]
+        return ""
+
+    @rx.var
     def formatted_discount_rate(self) -> str:
-        if not self.dcf_result:
+        if not self.dcf_result or "error" in self.dcf_result:
             return""
         return f"{self.dcf_result['discount_rate']:.2%}"
 
     @rx.var
     def formatted_growth_rate(self) -> str:
-        if not self.dcf_result:
+        if not self.dcf_result or "error" in self.dcf_result:
             return ""
         return f"{self.dcf_result['perpetual_growth_rate']:.2%}"
 
@@ -330,6 +336,11 @@ def markets() -> rx.Component:
                     align="start",
                 )
             ),
+
+                            rx.cond(
+                    State.dcf_error_message != "",
+                    rx.text(State.dcf_error_message, size="4", color="red"),
+                ),
 
         spacing="4",
         align="start",
